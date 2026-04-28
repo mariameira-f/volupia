@@ -108,6 +108,20 @@ async function loadProfile(){
   document.getElementById("barPerfil").textContent=currentProfile.perfil.charAt(0).toUpperCase()+currentProfile.perfil.slice(1);
 }
 
+async function editarMeuApelido(){
+  const novo=prompt("Novo apelido (nome de república):",currentProfile.apelido||"");
+  if(novo===null)return;
+  await sb.from("profiles").update({apelido:novo,updated_at:new Date().toISOString()}).eq("id",currentProfile.id);
+  currentProfile.apelido=novo;
+  // Update in allProfiles too
+  const p=allProfiles.find(x=>x.id===currentProfile.id);
+  if(p)p.apelido=novo;
+  document.getElementById("barNome").textContent=novo||currentProfile.nome;
+  await audit("Alterar apelido","profiles",currentProfile.id,{apelido:novo});
+  toast("Apelido atualizado!");
+  loadPainel();
+}
+
 // ============================================================
 // PERMISSIONS
 // ============================================================
@@ -216,11 +230,31 @@ async function loadAllData(){
 async function loadPainel(){
   const uid=currentProfile.id;
   const isExala=currentProfile.perfil==="ex-aluna";
+  const isBixo=currentProfile.perfil==="bixo";
 
   // Show/hide cards based on profile
   document.getElementById("pnlMoradoraCards").style.display=isExala?"none":"grid";
   document.getElementById("pnlExalaCards").style.display=isExala?"block":"none";
   document.getElementById("pnlHistoricoWrap").style.display=isExala?"none":"block";
+
+  // Bixo: show edit apelido button
+  let apelidoSection=document.getElementById("pnlApelidoEdit");
+  if(!apelidoSection){
+    apelidoSection=document.createElement("div");
+    apelidoSection.id="pnlApelidoEdit";
+    const painel=document.getElementById("tab-painel");
+    painel.insertBefore(apelidoSection,painel.children[1]);
+  }
+  if(isBixo){
+    apelidoSection.innerHTML=`<div class="card" style="margin-bottom:16px;border-left:4px solid var(--amber)">
+      <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div><span style="font-size:12px;color:#78716c">Seu apelido:</span> <strong style="font-size:14px">${currentProfile.apelido||"(sem apelido)"}</strong></div>
+        <button class="btn btn-secondary btn-sm" onclick="editarMeuApelido()"><i class="fas fa-pen"></i>Alterar Apelido</button>
+      </div>
+    </div>`;
+  }else{
+    apelidoSection.innerHTML="";
+  }
 
   if(isExala){
     // --- EXALA PANEL: MEI + CAMISAS ---
@@ -1757,23 +1791,16 @@ async function mudarPerfil(uid,novoPerfil){
   const old=allProfiles.find(p=>p.id===uid);
   if(!old)return;
   const oldPerfil=old.perfil;
-
-  // Se bixo → moradora, perguntar novo apelido antes de salvar
+  // Se bixo → moradora, perguntar novo apelido
+  let novoApelido=null;
   if(oldPerfil==="bixo"&&novoPerfil==="moradora"){
-    const novoApelido=await pedirApelidoMoradora(old.apelido||old.nome);
-    if(novoApelido===null){loadAdmin();return;}// cancelou: reverte select visualmente
-    const updateData={perfil:novoPerfil,updated_at:new Date().toISOString()};
-    if(novoApelido.trim())updateData.apelido=novoApelido.trim();
-    await sb.from("profiles").update(updateData).eq("id",uid);
-    await audit("Mudar perfil","profiles",uid,{de:oldPerfil,para:novoPerfil,novoApelido:novoApelido.trim()||undefined});
-    if(novoApelido.trim())old.apelido=novoApelido.trim();
-  }else{
-    await sb.from("profiles").update({perfil:novoPerfil,updated_at:new Date().toISOString()}).eq("id",uid);
-    await audit("Mudar perfil","profiles",uid,{de:oldPerfil,para:novoPerfil});
+    novoApelido=prompt(`${old.apelido||old.nome} está virando Moradora!\n\nNovo apelido (nome de república):`,old.apelido||"");
+    if(novoApelido===null)return;// Cancelou
   }
-
-  old.perfil=novoPerfil;
-
+  const updateData={perfil:novoPerfil,updated_at:new Date().toISOString()};
+  if(novoApelido!==null)updateData.apelido=novoApelido;
+  await sb.from("profiles").update(updateData).eq("id",uid);
+  await audit("Mudar perfil","profiles",uid,{de:oldPerfil,para:novoPerfil,apelido:novoApelido});
   // Se bixo → moradora, disparar joia
   if(oldPerfil==="bixo"&&novoPerfil==="moradora"){
     const{data:cfg}=await sb.from("config").select("salario_minimo").eq("id",1).single();
@@ -1788,33 +1815,16 @@ async function mudarPerfil(uid,novoPerfil){
       toast("Joia de entrada criada automaticamente!");
     }
   }
+  old.perfil=novoPerfil;
+  if(novoApelido!==null)old.apelido=novoApelido;
+  // Se é a própria pessoa, atualizar header
+  if(uid===currentProfile.id){
+    currentProfile.perfil=novoPerfil;
+    if(novoApelido!==null)currentProfile.apelido=novoApelido;
+    document.getElementById("barNome").textContent=currentProfile.apelido||currentProfile.nome;
+    document.getElementById("barPerfil").textContent=novoPerfil.charAt(0).toUpperCase()+novoPerfil.slice(1);
+  }
   toast("Perfil atualizado!");loadAdmin();
-}
-
-// Abre modal pedindo novo apelido ao promover bixo → moradora
-function pedirApelidoMoradora(apelidoAtual){
-  return new Promise(resolve=>{
-    const overlay=document.getElementById("modalOverlay");
-    const title=document.getElementById("modalTitle");
-    const body=document.getElementById("modalBody");
-    title.textContent="🎉 Promovendo para Moradora";
-    body.innerHTML=`
-      <p style="font-size:13px;color:#57534e;margin:0 0 16px">A bixo está se tornando moradora! Você pode atualizar o apelido dela agora.</p>
-      <div style="margin-bottom:16px">
-        <label>Apelido de moradora</label>
-        <input type="text" id="novoApelidoInput" placeholder="${apelidoAtual}" value="${apelidoAtual}" style="font-size:14px">
-        <p style="font-size:11px;color:#a8a29e;margin:4px 0 0">Deixe em branco para manter o apelido atual.</p>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-secondary" id="apelidoCancelarBtn">Cancelar</button>
-        <button class="btn btn-primary" id="apelidoConfirmarBtn"><i class="fas fa-check"></i>Confirmar</button>
-      </div>`;
-    overlay.style.display="block";
-    setTimeout(()=>document.getElementById("novoApelidoInput")?.focus(),100);
-    function cleanup(val){overlay.style.display="none";resolve(val);}
-    document.getElementById("apelidoConfirmarBtn").onclick=()=>cleanup(document.getElementById("novoApelidoInput").value);
-    document.getElementById("apelidoCancelarBtn").onclick=()=>cleanup(null);
-  });
 }
 
 async function salvarConfig(){
