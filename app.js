@@ -1,6 +1,4 @@
-// ============================================================
-// GLOBALS
-// ============================================================
+
 const SUPABASE_URL="https://ckrrogbcthkhxhdotmfy.supabase.co";
 const SUPABASE_KEY=localStorage.getItem("sb_key")||"";
 let sb=null,currentUser=null,currentProfile=null,allProfiles=[];
@@ -9,14 +7,10 @@ const fmtBRL=v=>"R$ "+(+v).toLocaleString("pt-BR",{minimumFractionDigits:2});
 const meses=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const mesesFull=["","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-// ============================================================
-// INIT
-// ============================================================
+
 (async()=>{
-  // Se já tem key salva, esconde o campo e tenta restaurar sessão
   if(SUPABASE_KEY){
     document.getElementById("keyFieldWrap").style.display="none";
-    document.getElementById("loginKey").removeAttribute("required");
     sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
     try{
       const{data:{session}}=await sb.auth.getSession();
@@ -27,16 +21,19 @@ const mesesFull=["","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho
         return;
       }
     }catch(e){console.warn("Sessão expirada",e);}
+    
+    showLogin();
+  }else{
+    
+    document.getElementById("keyFieldWrap").style.display="block";
+    showLogin();
   }
-  showLogin();
 })();
 
 function showLogin(){document.getElementById("loginScreen").style.display="flex";document.getElementById("appWrap").style.display="none";}
 function showApp(){document.getElementById("loginScreen").style.display="none";document.getElementById("appWrap").style.display="block";applyPermissions();loadAllData();}
 
-// ============================================================
-// AUTH
-// ============================================================
+
 document.getElementById("showSignupBtn").onclick=()=>{document.getElementById("signupBox").style.display=document.getElementById("signupBox").style.display==="none"?"block":"none";};
 
 document.getElementById("loginForm").onsubmit=async e=>{
@@ -58,7 +55,7 @@ document.getElementById("loginForm").onsubmit=async e=>{
   const{data,error}=await sb.auth.signInWithPassword({email,password:pw});
   btn.disabled=false;btn.innerHTML='<i class="fas fa-sign-in-alt"></i>Entrar';
   if(error){
-    // Se erro de key, limpar e mostrar campo de novo
+    
     if(error.message.includes("Invalid API key")||error.message.includes("apikey")){
       localStorage.removeItem("sb_key");
       document.getElementById("keyFieldWrap").style.display="block";
@@ -77,7 +74,7 @@ document.getElementById("loginForm").onsubmit=async e=>{
 document.getElementById("signupForm").onsubmit=async e=>{
   e.preventDefault();
   let key=localStorage.getItem("sb_key");
-  // Se não tem key salva, pegar do campo de login
+  
   if(!key){
     const keyField=document.getElementById("loginKey");
     if(keyField&&keyField.value.trim())key=keyField.value.trim();
@@ -122,42 +119,46 @@ async function editarMeuApelido(){
   loadPainel();
 }
 
-// ============================================================
-// PERMISSIONS
-// ============================================================
+
 function applyPermissions(){
   const p=currentProfile.perfil;
-  const tabs=document.querySelectorAll("[data-tab]");
-  tabs.forEach(t=>{
-    const tab=t.dataset.tab;
-    t.classList.remove("disabled");
-    // Bixo: painel + camisas apenas
-    if(p==="bixo"&&!["painel","camisas"].includes(tab))t.classList.add("disabled");
-    // Ex-Aluna: painel, aniversário, mei, camisas
-    if(p==="ex-aluna"&&["presidencia","joias","caixinha","carnaval","auditoria","admin"].includes(tab))t.classList.add("disabled");
-    // Agregada: painel apenas (entra no sistema só quando selecionada em divisão)
-    if(p==="agregada"&&!["painel"].includes(tab))t.classList.add("disabled");
+  
+  const allowed={
+    "moradora":["painel","presidencia","joias","aniversario","mei","camisas","caixinha","carnaval","auditoria","admin"],
+    "bixo":["painel","camisas"],
+    "ex-aluna":["painel","aniversario","mei","camisas"],
+    "agregada":["painel"]
+  };
+  const myTabs=allowed[p]||["painel"];
+  // Desktop tabs: HIDE completely (not just disabled) for ex-alunas
+  document.querySelectorAll(".main-tab[data-tab]").forEach(t=>{
+    if(myTabs.includes(t.dataset.tab)){t.style.display="inline-flex";t.classList.remove("disabled");}
+    else{t.style.display="none";}
   });
-  // Hide admin config cards for non-moradoras
+  
+  document.querySelectorAll(".mob-nav-item[data-tab]").forEach(t=>{
+    if(myTabs.includes(t.dataset.tab)){t.style.display="flex";}
+    else{t.style.display="none";}
+  });
+  
   if(p!=="moradora"){
     document.getElementById("aniConfigCard").style.display="none";
     document.getElementById("meiConfigCard").style.display="none";
+    const cc=document.getElementById("carnConfigCard");if(cc)cc.style.display="none";
   }else{
     document.getElementById("aniConfigCard").style.display="block";
     document.getElementById("meiConfigCard").style.display="block";
+    const cc=document.getElementById("carnConfigCard");if(cc)cc.style.display="block";
   }
-  // Camisas sub-tabs visibility
+  
   if(p!=="moradora"){
     document.querySelectorAll('.cam-subtab[data-sub="todos"],.cam-subtab[data-sub="gestao"]').forEach(b=>b.style.display="none");
   }else{
     document.querySelectorAll('.cam-subtab[data-sub="todos"],.cam-subtab[data-sub="gestao"]').forEach(b=>b.style.display="inline-flex");
   }
-  // Aniversário: exala sees read-only (hide config card handled above)
 }
 
-// ============================================================
-// TABS
-// ============================================================
+
 function switchTab(t){
   document.querySelectorAll(".tab-section").forEach(s=>s.style.display="none");
   const el=document.getElementById("tab-"+t);if(el)el.style.display="block";
@@ -182,14 +183,10 @@ function camSubTab(sub){
   if(btn){btn.classList.add("active");btn.style.borderColor="var(--bordo)";btn.style.color="var(--bordo)";}
 }
 
-// ============================================================
-// TOAST
-// ============================================================
+
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2500);}
 
-// ============================================================
-// VISIBILITY TOGGLE
-// ============================================================
+
 function toggleVisibility(){
   valoresVisiveis=!valoresVisiveis;
   document.getElementById("visIcon").className=valoresVisiveis?"fas fa-eye":"fas fa-eye-slash";
@@ -199,9 +196,7 @@ function toggleVisibility(){
   });
 }
 
-// ============================================================
-// MODAL
-// ============================================================
+
 function abrirModal(title,html){
   document.getElementById("modalTitle").textContent=title;
   document.getElementById("modalBody").innerHTML=html;
@@ -209,25 +204,19 @@ function abrirModal(title,html){
 }
 function fecharModal(){document.getElementById("modalOverlay").style.display="none";}
 
-// ============================================================
-// AUDIT
-// ============================================================
+
 async function audit(acao,tabela,registroId,detalhes){
   await sb.from("audit_log").insert({user_id:currentProfile.id,user_nome:currentProfile.apelido||currentProfile.nome,acao,tabela,registro_id:String(registroId||""),detalhes:detalhes||{}});
 }
 
-// ============================================================
-// LOAD ALL DATA
-// ============================================================
+
 async function loadAllData(){
   const{data}=await sb.from("profiles").select("*").order("nome");
   allProfiles=data||[];
   loadPainel();
 }
 
-// ============================================================
-// PAINEL
-// ============================================================
+
 async function loadPainel(){
   const uid=currentProfile.id;
   const isExala=currentProfile.perfil==="ex-aluna";
@@ -238,7 +227,7 @@ async function loadPainel(){
   document.getElementById("pnlExalaCards").style.display=isExala?"block":"none";
   document.getElementById("pnlHistoricoWrap").style.display=isExala?"none":"block";
 
-  // Bixo: show edit apelido button
+ 
   let apelidoSection=document.getElementById("pnlApelidoEdit");
   if(!apelidoSection){
     apelidoSection=document.createElement("div");
@@ -258,8 +247,7 @@ async function loadPainel(){
   }
 
   if(isExala){
-    // --- EXALA PANEL: MEI + CAMISAS ---
-    // MEI data
+
     const thisYear=new Date().getFullYear();
     const{data:meiData}=await sb.from("mei").select("*").eq("ano",thisYear).maybeSingle();
     if(meiData){
@@ -311,8 +299,7 @@ async function loadPainel(){
     return;
   }
 
-  // --- MORADORA/BIXO PANEL ---
-  // Calculate current presidência value from included lancamentos
+
   const{data:presData}=await sb.from("presidencias").select("*").order("ano",{ascending:false}).order("mes",{ascending:false}).limit(1);
   let presValor=0;
   if(presData&&presData.length){
@@ -365,9 +352,7 @@ async function loadPainel(){
   }else document.getElementById("pnlJoia").textContent="N/A";
 }
 
-// ============================================================
-// PRESIDÊNCIA
-// ============================================================
+
 async function loadPresidencias(){
   const{data}=await sb.from("presidencias").select("*").order("ano",{ascending:false}).order("mes",{ascending:false});
   const sel=document.getElementById("presSelect");
@@ -413,7 +398,7 @@ async function loadPresidencia(){
       <td class="val-hide" style="font-weight:700">${fmtBRL(l.valor)}</td>
       <td><span class="badge ${badge}">${l.status}</span></td>
       <td style="font-size:11px;color:#78716c">${criador}</td>
-      <td>${showActions?`<button class="btn btn-sm btn-secondary" onclick="incluirLanc(${l.id},'incluido')">✓</button><button class="btn btn-sm btn-danger" onclick="incluirLanc(${l.id},'rejeitado')" style="margin-left:4px">✗</button>`:""}</td>
+      <td>${showActions?`<button class="btn btn-sm btn-secondary" onclick="abrirFormLanc(${l.id})" title="Editar"><i class="fas fa-pen"></i></button> <button class="btn btn-sm btn-success" onclick="incluirLanc(${l.id},'incluido')">✓</button><button class="btn btn-sm btn-danger" onclick="incluirLanc(${l.id},'rejeitado')" style="margin-left:4px">✗</button>`:""}</td>
     </tr>`;
   }).join("");
 
@@ -623,27 +608,25 @@ async function salvarNovaPresidencia(){
   fecharModal();toast("Presidência criada!");loadPresidencias();
 }
 
-function abrirFormLanc(){
+function abrirFormLanc(editId){
   const moradoras=allProfiles.filter(p=>p.perfil==="moradora");
   const bixos=allProfiles.filter(p=>p.perfil==="bixo");
   const agregadas=allProfiles.filter(p=>p.perfil==="agregada");
-  const allPeople=[...moradoras,...bixos,...agregadas];
-  const pessoasOpts=`<option value="">— Selecione —</option><option value="Casa">🏠 Casa</option>`+
+  const pessoasOpts=`<option value="">— Selecione —</option><option value="Casa">🏠 Casa</option><option value="Caixinha">💰 Caixinha</option>`+
     [{label:"Moradoras",items:moradoras},{label:"Bixos",items:bixos},{label:"Agregadas",items:agregadas}].map(g=>g.items.length?`<optgroup label="${g.label}">${g.items.map(p=>`<option value="${p.id}">${p.apelido||p.nome}</option>`).join("")}</optgroup>`:"").join("");
-
-  // Build person checkboxes grouped
-  let divChecks="";
+  const allPeople=[...moradoras,...bixos,...agregadas];
+  const acertoOpts=allPeople.map(p=>`<option value="${p.id}">${p.apelido||p.nome}</option>`).join("");
   const mkCheck=(p,checked)=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;text-transform:none;font-weight:500;cursor:pointer;padding:3px 0"><input type="checkbox" class="divPerson" value="${p.id}" ${checked?"checked":""}> ${p.apelido||p.nome}</label>`;
+  let divChecks="";
   if(moradoras.length)divChecks+=`<div style="margin-bottom:6px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><strong style="font-size:10px;color:#78716c;text-transform:uppercase">Moradoras</strong><button type="button" class="btn btn-sm btn-secondary" style="padding:2px 6px;font-size:9px" onclick="toggleDivGroup('moradora')">Todas</button></div>${moradoras.map(m=>mkCheck(m,true)).join("")}</div>`;
   if(bixos.length)divChecks+=`<div style="margin-bottom:6px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><strong style="font-size:10px;color:#78716c;text-transform:uppercase">Bixos</strong><button type="button" class="btn btn-sm btn-secondary" style="padding:2px 6px;font-size:9px" onclick="toggleDivGroup('bixo')">Todas</button></div>${bixos.map(m=>mkCheck(m,false)).join("")}</div>`;
   if(agregadas.length)divChecks+=`<div><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><strong style="font-size:10px;color:#78716c;text-transform:uppercase">Agregadas</strong><button type="button" class="btn btn-sm btn-secondary" style="padding:2px 6px;font-size:9px" onclick="toggleDivGroup('agregada')">Todas</button></div>${agregadas.map(m=>mkCheck(m,false)).join("")}</div>`;
-
   sb.from("categorias_presidencia").select("*").order("nome").then(({data})=>{
-    // Filter out Acerto category
     const cats=(data||[]).filter(c=>c.nome!=="Acerto");
     const catOpts=cats.map(c=>`<option value="${c.id}">${c.icone} ${c.nome}</option>`).join("");
-    abrirModal("Novo Lançamento",`
+    abrirModal(editId?"Editar Lançamento":"Novo Lançamento",`
       <div style="display:grid;gap:10px">
+        <input type="hidden" id="mLancEditId" value="${editId||""}">
         <div><label>Data</label><input type="date" id="mLancData" value="${new Date().toISOString().split("T")[0]}"></div>
         <div><label>Descrição</label><input type="text" id="mLancDesc" placeholder="Descrição" required></div>
         <div><label>Valor (R$)</label><input type="number" id="mLancValor" step="0.01" placeholder="0.00" required></div>
@@ -655,15 +638,16 @@ function abrirFormLanc(){
         </div>
         <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="salvarLanc()"><i class="fas fa-save"></i>Salvar</button>
         <hr style="border:none;border-top:1px solid #e7e5e4;margin:4px 0">
-        <p style="font-size:11px;font-weight:700;color:#78716c;margin:0"><i class="fas fa-exchange-alt" style="margin-right:4px"></i>Acerto entre Moradoras</p>
+        <p style="font-size:11px;font-weight:700;color:#78716c;margin:0"><i class="fas fa-exchange-alt" style="margin-right:4px"></i>Acerto entre pessoas</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div><label>Deve</label><select id="acertoDeve"><option value="">—</option>${moradoras.map(m=>`<option value="${m.id}">${m.apelido||m.nome}</option>`).join("")}</select></div>
-          <div><label>Recebe</label><select id="acertoRecebe"><option value="">—</option>${moradoras.map(m=>`<option value="${m.id}">${m.apelido||m.nome}</option>`).join("")}</select></div>
+          <div><label>Deve</label><select id="acertoDeve"><option value="">—</option>${acertoOpts}</select></div>
+          <div><label>Recebe</label><select id="acertoRecebe"><option value="">—</option>${acertoOpts}</select></div>
         </div>
         <div><label>Valor (R$)</label><input type="number" id="acertoValor" step="0.01" placeholder="0.00"></div>
         <button class="btn btn-secondary" style="width:100%;justify-content:center" onclick="registrarAcerto()"><i class="fas fa-exchange-alt"></i>Registrar Acerto</button>
       </div>
     `);
+    if(editId){sb.from("lancamentos").select("*").eq("id",editId).single().then(({data:l})=>{if(!l)return;document.getElementById("mLancData").value=l.data;document.getElementById("mLancDesc").value=l.descricao;document.getElementById("mLancValor").value=l.valor;if(l.categoria_id)document.getElementById("mLancCat").value=l.categoria_id;});}
   });
 }
 
@@ -694,25 +678,32 @@ async function registrarAcerto(){
 async function salvarLanc(){
   const pid=document.getElementById("presSelect").value;
   if(!pid){alert("Selecione uma presidência.");return;}
+  const editId=document.getElementById("mLancEditId")?.value;
   const quemSel=document.getElementById("mLancQuem");
   const quemNome=quemSel.options[quemSel.selectedIndex]?quemSel.options[quemSel.selectedIndex].text:"";
-  // Get selected people IDs
   const selectedIds=[...document.querySelectorAll(".divPerson:checked")].map(c=>c.value);
   const obj={
     presidencia_id:parseInt(pid),
     data:document.getElementById("mLancData").value,
     descricao:document.getElementById("mLancDesc").value,
-    valor:parseFloat(document.getElementById("mLancValor").value),
+    valor:Number(document.getElementById("mLancValor").value),
     categoria_id:parseInt(document.getElementById("mLancCat").value),
     quem_pagou:quemNome,
-    status:"pendente",
     divisao_custom:{pessoas:selectedIds},
     created_by:currentProfile.id
   };
-  const{error}=await sb.from("lancamentos").insert(obj);
-  if(error){alert("Erro: "+error.message);return;}
-  await audit("Novo lançamento","lancamentos","",{descricao:obj.descricao,valor:obj.valor});
-  fecharModal();toast("Lançamento adicionado!");loadPresidencia();
+  if(editId){
+    await sb.from("lancamentos").update(obj).eq("id",parseInt(editId));
+    await audit("Editar lançamento","lancamentos",editId,{descricao:obj.descricao,valor:obj.valor});
+    fecharModal();toast("Lançamento atualizado!");
+  }else{
+    obj.status="pendente";
+    const{error}=await sb.from("lancamentos").insert(obj);
+    if(error){alert("Erro: "+error.message);return;}
+    await audit("Novo lançamento","lancamentos","",{descricao:obj.descricao,valor:obj.valor});
+    fecharModal();toast("Lançamento adicionado!");
+  }
+  loadPresidencia();
 }
 
 async function incluirLanc(id,status){
@@ -777,7 +768,7 @@ async function pagarJoia(joiaId){
   if(!joia)return;
   const{data:pagos}=await sb.from("joias_pagamentos").select("valor").eq("joia_id",joiaId).eq("pago",true);
   const totalPago=(pagos||[]).reduce((s,p)=>s+parseFloat(p.valor),0);
-  const falta=Math.max(0,parseFloat(joia.valor_integral)-totalPago);
+  const falta=parseFloat(joia.valor_integral)-totalPago;
 
   const tipo=prompt("Tipo de entrada:\n1 = Dinheiro\n2 = Produto doado para a casa\n\nDigite 1 ou 2:","1");
   if(!tipo)return;
@@ -788,17 +779,19 @@ async function pagarJoia(joiaId){
   }
   const valorStr=prompt(`Valor da entrada?\n\nTotal da joia: ${fmtBRL(joia.valor_integral)}\nJá pago: ${fmtBRL(totalPago)}\nFalta: ${fmtBRL(falta)}`,falta.toFixed(2));
   if(!valorStr)return;
-  const valor=parseFloat(valorStr);
-  if(isNaN(valor)||valor<=0){alert("Valor inválido.");return;}
+  // Keep exact value as string to avoid rounding
+  const valorNum=Number(valorStr.replace(",","."));
+  if(isNaN(valorNum)||valorNum<=0){alert("Valor inválido.");return;}
 
   const dataPag=prompt("Data (DD/MM/AAAA):",new Date().toLocaleDateString("pt-BR"));
   let dataISO=new Date().toISOString().split("T")[0];
   if(dataPag){const pts=dataPag.split("/");if(pts.length===3)dataISO=`${pts[2]}-${pts[1].padStart(2,"0")}-${pts[0].padStart(2,"0")}`;}
 
-  await sb.from("joias_pagamentos").insert({joia_id:joiaId,mes:new Date().getMonth()+1,valor,pago:true,data_pagamento:dataISO,marcado_por:currentProfile.id});
+  const{error}=await sb.from("joias_pagamentos").insert({joia_id:joiaId,mes:new Date().getMonth()+1,valor:valorNum,pago:true,data_pagamento:dataISO,marcado_por:currentProfile.id});
+  if(error){alert("Erro ao salvar: "+error.message);return;}
   const tipoLabel=tipo==="2"?"Produto: "+obs:"Dinheiro";
-  await audit("Pagamento joia","joias",joiaId,{tipo:tipoLabel,valor,data:dataISO});
-  toast(`${fmtBRL(valor)} registrado!${obs?" ("+obs+")":""}`);
+  await audit("Pagamento joia","joias",joiaId,{tipo:tipoLabel,valor:valorNum,obs,data:dataISO});
+  toast(`${fmtBRL(valorNum)} registrado!${obs?" ("+obs+")":""}`);
   loadJoias();
 }
 
